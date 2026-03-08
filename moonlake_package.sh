@@ -58,16 +58,16 @@ for config in "${CONFIGS[@]}"; do
   # Map the config string to the corresponding gn flags
   case "$config" in
     host_debug)
-      python3 ./flutter/tools/gn --runtime-mode debug
+      python3 ./flutter/tools/gn --runtime-mode debug --no-lto
       ;;
     android_debug_x64)
-      python3 ./flutter/tools/gn --android --android-cpu=x64 --runtime-mode debug
+      python3 ./flutter/tools/gn --android --android-cpu=x64 --runtime-mode debug --no-lto
       ;;
     android_debug_arm64)
-      python3 ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode debug
+      python3 ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode debug --no-lto
       ;;
     android_release_arm64)
-      python3 ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode release
+      python3 ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode release 
       ;;
     *)
       echo "Error: Unmapped configuration '$config'"
@@ -133,77 +133,7 @@ if [[ "$STRIP_DEBUG_SYMBOLS" == "1" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4: Prepare cache directories
-# ---------------------------------------------------------------------------
-echo "=== Preparing cache directories ==="
-rm -rf "$ENGINE_CACHE" "$PKG_CACHE"
-mkdir -p "$ENGINE_CACHE" "$PKG_CACHE"
-
-# ---------------------------------------------------------------------------
-# Step 5: Copy host_debug artifacts → linux-x64/
-# ---------------------------------------------------------------------------
-echo "=== Copying host artifacts to cache ==="
-LINUX_X64="$ENGINE_CACHE/linux-x64"
-mkdir -p "$LINUX_X64"
-
-cp "$OUT/host_debug/gen_snapshot"  "$LINUX_X64/"
-cp "$OUT/host_debug/flutter_tester" "$LINUX_X64/"
-cp "$OUT/host_debug/impellerc"    "$LINUX_X64/"
-cp "$OUT/host_debug/font-subset"  "$LINUX_X64/"
-
-cp "$OUT/host_debug/libflutter_linux_gtk.so" "$LINUX_X64/"
-cp "$OUT/host_debug/libpath_ops.so"          "$LINUX_X64/"
-cp "$OUT/host_debug/libtessellator.so"       "$LINUX_X64/"
-
-cp "$OUT/host_debug/icudtl.dat" "$LINUX_X64/"
-
-cp "$OUT/host_debug/gen/flutter/lib/snapshot/isolate_snapshot.bin"    "$LINUX_X64/"
-cp "$OUT/host_debug/gen/flutter/lib/snapshot/vm_isolate_snapshot.bin" "$LINUX_X64/"
-cp "$OUT/host_debug/gen/frontend_server_aot.dart.snapshot" "$LINUX_X64/"
-cp "$OUT/host_debug/gen/const_finder.dart.snapshot"        "$LINUX_X64/"
-
-cp -r "$OUT/host_debug/flutter_linux" "$LINUX_X64/"
-cp -r "$OUT/host_debug/shader_lib"    "$LINUX_X64/"
-
-chmod +x "$LINUX_X64/gen_snapshot" "$LINUX_X64/flutter_tester" \
-         "$LINUX_X64/impellerc" "$LINUX_X64/font-subset"
-
-# ---------------------------------------------------------------------------
-# Step 6: Copy common artifacts (flutter_patched_sdk)
-# ---------------------------------------------------------------------------
-echo "=== Copying common artifacts ==="
-COMMON="$ENGINE_CACHE/common"
-mkdir -p "$COMMON"
-
-cp -r "$OUT/host_debug/flutter_patched_sdk" "$COMMON/flutter_patched_sdk"
-cp -r "$OUT/android_release_arm64/flutter_patched_sdk" "$COMMON/flutter_patched_sdk_product"
-
-# ---------------------------------------------------------------------------
-# Step 7: Copy android artifacts to cache
-# ---------------------------------------------------------------------------
-echo "=== Copying Android artifacts to cache ==="
-
-mkdir -p "$ENGINE_CACHE/android-x64"
-cp "$OUT/android_debug_x64/flutter.jar" "$ENGINE_CACHE/android-x64/"
-
-mkdir -p "$ENGINE_CACHE/android-arm64"
-cp "$OUT/android_debug_arm64/flutter.jar" "$ENGINE_CACHE/android-arm64/"
-
-mkdir -p "$ENGINE_CACHE/android-arm64-release/linux-x64"
-cp "$OUT/android_release_arm64/flutter.jar" "$ENGINE_CACHE/android-arm64-release/"
-cp "$OUT/android_release_arm64/clang_x64/gen_snapshot" \
-   "$ENGINE_CACHE/android-arm64-release/linux-x64/"
-chmod +x "$ENGINE_CACHE/android-arm64-release/linux-x64/gen_snapshot"
-
-# ---------------------------------------------------------------------------
-# Step 8: Copy packages
-# ---------------------------------------------------------------------------
-echo "=== Copying packages ==="
-cp -r "$OUT/host_debug/gen/dart-pkg/sky_engine" "$PKG_CACHE/sky_engine"
-cp -r "$ENGINE_SRC/flutter/lib/gpu"             "$PKG_CACHE/flutter_gpu"
-
-# ---------------------------------------------------------------------------
-# Step 9: Create placeholder directories (for stamp system)
+# Step 4: Create placeholder directories (for stamp system)
 #
 # Precache checks that ALL expected directories exist. Empty dirs for
 # configs we don't build prevent precache from trying to re-download
@@ -235,7 +165,7 @@ for dir in "${PLACEHOLDER_DIRS[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# Step 10: Set stamp files
+# Step 5: Set stamp files
 # ---------------------------------------------------------------------------
 echo "=== Setting stamp files ==="
 STAMP_VALUE=$(cat "$CACHE/engine.stamp")
@@ -246,7 +176,7 @@ for stamp in flutter_sdk android-sdk android-internal-build-artifacts linux-sdk;
 done
 
 # ---------------------------------------------------------------------------
-# Step 11: Create and commit bin/internal/engine.version
+# Step 6: Create and commit bin/internal/engine.version
 #
 # update_engine_version.sh checks if this file is tracked in git.
 # If found, it uses the content directly — bypassing content_aware_hash.sh
@@ -260,13 +190,13 @@ cd "$SCRIPT_DIR"
 #git commit -m "Pin engine.version for SDK distribution"
 
 # ---------------------------------------------------------------------------
-# Step 12: Create version file
+# Step 7: Create version file
 # ---------------------------------------------------------------------------
 echo "=== Creating version file ==="
 printf '%s' "$VERSION_STRING" > "$SCRIPT_DIR/version"
 
 # ---------------------------------------------------------------------------
-# Step 13: Create tar.gz
+# Step 8: Create tar.gz
 #
 # Includes:
 #   - SDK source (packages/, bin/ scripts)
@@ -319,6 +249,8 @@ tar -I pigz -cf "$SCRIPT_DIR/flutter_sdk_linux.tar.gz" \
   "$FLUTTER_DIR_NAME/engine/src/out/android_debug_x64/" \
   "$FLUTTER_DIR_NAME/engine/src/out/android_debug_arm64/" \
   "$FLUTTER_DIR_NAME/engine/src/out/android_release_arm64/" \
+  "$FLUTTER_DIR_NAME/engine/src/out/host_debug/gen/dart-pkg/sky_engine/" \
+  "$FLUTTER_DIR_NAME/engine/src/flutter/lib/gpu/" \
   "$FLUTTER_DIR_NAME/engine/src/flutter/prebuilts/linux-x64/esbuild/" \
   "$FLUTTER_DIR_NAME/engine/src/flutter/prebuilts/linux-x64/dart-sdk/" \
   "$FLUTTER_DIR_NAME/LICENSE" \
